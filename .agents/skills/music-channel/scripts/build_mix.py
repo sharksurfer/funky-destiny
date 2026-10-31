@@ -28,7 +28,7 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import (PROJECTS, build_visual_loop, collect_clips, fmt_ts,  # noqa: E402
+from common import (CHANNEL_NAME, PROJECTS, build_visual_loop, collect_clips, fmt_ts,  # noqa: E402
                     load_masters, probe_duration, require_ffmpeg, run)
 
 
@@ -178,6 +178,7 @@ def main() -> None:
          "-f", "concat", "-safe", "0", "-i", str(concat_list), "-i", str(mix),
          "-map", "0:v", "-map", "1:a", "-c:v", "copy",
          "-c:a", "aac", "-b:a", "320k", "-ar", "48000",
+         "-metadata", f"artist={CHANNEL_NAME}",
          "-t", f"{audio_dur:.3f}", "-movflags", "+faststart", str(out)])
 
     # 4) Artifacts

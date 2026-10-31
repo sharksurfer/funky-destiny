@@ -25,6 +25,17 @@ MASTERS_PROJECT = PROJECTS / "audio-masters"
 MASTERS_DIR = MASTERS_PROJECT / "assets" / "audio"
 MASTERS_MANIFEST = MASTERS_PROJECT / "artifacts" / "masters.json"
 
+# Load .env if present
+env_file = REPO / ".env"
+if env_file.exists():
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            k, v = k.strip(), v.strip().strip("'\"")
+            if k not in os.environ:
+                os.environ[k] = v
+
 CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "Music Channel")
 
 # Example: "Artist - Title - [@tag]" or "Artist - Title"
