@@ -39,15 +39,16 @@ sudo apt update && sudo apt install -y ffmpeg fonts-dejavu-core
 │   │   └── scripts/
 │   │       ├── common.py           # Utilitários compartilhados (ffmpeg, filtros, metadados)
 │   │       ├── master_tracks.py    # Masterização, fade e loudness
-│   │       ├── render_single.py    # Renderizador de singles
-│   │       └── build_mix.py        # Compilador de mix longo
+│   │       ├── render_single.py    # Renderizador de singles + geração de thumbnail
+│   │       ├── build_mix.py        # Compilador de mix longo + geração de thumbnail
+│   │       └── thumbnail_generator.py # Gerador de thumbnails 1280x720 de alto CTR
 │   ├── music-audio-mastering/      # Skill de masterização
 │   ├── music-single-video/         # Skill de singles
 │   └── music-mix-compilation/      # Skill de mixes
 └── projects/                       # (Gitignored) Onde ficam todos os renders e saídas
     ├── audio-masters/              # Músicas tratadas e manifesto masters.json
-    ├── single-<slug>/              # Vídeos individuais renderizados
-    └── mix-<data>/                 # Vídeos longos de 1h+ e capítulos
+    ├── single-<slug>/renders/      # Vídeos individuais (.mp4) e Thumbnails (<slug>-thumb.jpg)
+    └── mix-<data>/renders/         # Vídeos longos de 1h+ e Thumbnails (-thumb.jpg)
 ```
 
 ---
@@ -58,8 +59,8 @@ sudo apt update && sudo apt install -y ffmpeg fonts-dejavu-core
 flowchart LR
   A["project-assets/songs/*.flac"] --> B["master_tracks.py<br/>fade 5s + -14 LUFS"]
   B --> C["projects/audio-masters/<br/>masters.json"]
-  C --> D["render_single.py<br/>1 vídeo por música"]
-  C --> E["build_mix.py<br/>mix 1h+ + capítulos"]
+  C --> D["render_single.py<br/>1 vídeo por música + Thumbnail"]
+  C --> E["build_mix.py<br/>mix 1h+ + capítulos + Thumbnail"]
 ```
 
 ---
@@ -154,6 +155,38 @@ python3 $S/build_mix.py --order shuffle --seed 42
 **Saída gerada:**
 - Vídeo completo em `projects/mix-<data>/renders/mix-<data>.mp4`
 - Capítulos prontos para copiar na descrição do YouTube em `projects/mix-<data>/artifacts/chapters.txt`
+- Thumbnail do Mix em `projects/mix-<data>/renders/mix-<data>-thumb.jpg`
+
+---
+
+## 4. Upload Automático no YouTube com SEO e Thumbnails
+
+Script completo para publicação direta via YouTube Data API v3 com otimização algorítmica:
+- Títulos de alta taxa de clique (CTR) e créditos da faixa
+- Descrições ricas com capítulos automáticos injetados
+- Tags musicais e categoria Música (ID 10)
+- Envio automático da Thumbnail personalizada (`-thumb.jpg`)
+
+### Configuração Inicial (Apenas 1 vez):
+1. No [Google Cloud Console](https://console.cloud.google.com/apis/credentials), crie um ID de Cliente OAuth (tipo Desktop App) com a **YouTube Data API v3** ativada.
+2. Salve o arquivo JSON na raiz do repositório como `client_secret.json`.
+
+### Comandos de Upload:
+
+```bash
+S=.agents/skills/music-channel/scripts
+
+# 1. Enviar um Single específico:
+python3 $S/youtube_uploader.py --song "rubber-people" --privacy private
+
+# 2. Enviar o Mix de 1h+ com capítulos na descrição e thumbnail:
+python3 $S/youtube_uploader.py --mix "funky-destiny-1hour-bass-mix" --privacy private
+
+# 3. Enviar todos os 24 singles em lote:
+python3 $S/youtube_uploader.py --all-singles --privacy private
+```
+
+*Nota: Por padrão, o parâmetro `--privacy` usa `private` (privado) para que você possa conferir no YouTube Studio antes de publicar. Você também pode passar `--privacy unlisted` (não-listado) ou `--privacy public` (público).*
 
 ---
 

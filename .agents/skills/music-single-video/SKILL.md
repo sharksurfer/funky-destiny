@@ -1,10 +1,11 @@
 ---
 name: music-single-video
 description: >-
-  Cria o vídeo individual de uma música para o YouTube: clipe(s) visuais em loop
-  pela duração da faixa masterizada, enquadramento 16:9 com fundo desfocado,
-  card de título animado, fade in/out e áudio AAC 320k.
-  Use quando o usuário pedir o vídeo de uma música específica ou lote de singles.
+  Cria o vídeo individual de uma música para o YouTube usando o motor oficial
+  de Visualizador Reativo: arte exclusiva da faixa (1080p Full HD) com drift suave,
+  animação da personagem em escala nativa 16:9 (blend translúcido com presença),
+  distorções reativas de graves (heatwave + chromatic split), equalizador LED de frequência
+  e o HUD badge oficial do canal.
 ---
 
 # Music Single Video
@@ -17,8 +18,11 @@ Pré-requisito: áudio masterizado em `projects/audio-masters/` ([`music-audio-m
 ```bash
 S=.agents/skills/music-channel/scripts
 
-python3 $S/render_single.py --song "nome-da-musica" \
-  --clips project-assets/videos/clip1.mp4 project-assets/videos/clip2.mp4
+# Renderiza uma música específica usando o motor visualizer reativo oficial
+python3 $S/render_single.py --song "slap-attack"
+
+# Renderiza em lote todas as faixas
+python3 $S/render_single.py --all
 ```
 
 | Flag | Padrão | Uso |

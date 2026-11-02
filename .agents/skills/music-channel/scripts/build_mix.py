@@ -28,8 +28,12 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import (CHANNEL_NAME, PROJECTS, build_visual_loop, collect_clips, fmt_ts,  # noqa: E402
+from common import (CHANNEL_NAME, PROJECTS, REPO, build_visual_loop, collect_clips, fmt_ts,  # noqa: E402
                     load_masters, probe_duration, require_ffmpeg, run)
+from thumbnail_generator import create_thumbnail
+
+HUD_BADGE_PNG = REPO / "project-assets" / "channel-branding" / "hud_badge_right.png"
+GRID_MASK_PNG = REPO / "project-assets" / "channel-branding" / "eq_grid_mask.png"
 
 
 def order_tracks(tracks: list[dict], mode: str, seed: int | None, order_file: Path | None) -> list[dict]:
@@ -160,7 +164,7 @@ def main() -> None:
     run(cmd)
     audio_dur = probe_duration(mix)
 
-    # 2) Visual loop (encoded once)
+    # 2) Visual loop (encoded once with color grading and dynamic cuts)
     clips = collect_clips(args.clips)
     w, h = (int(x) for x in args.resolution.lower().split("x"))
     loop = project / "assets" / "video" / "loop.mp4"
@@ -173,12 +177,33 @@ def main() -> None:
     concat_list = project / "assets" / "video" / "loop_concat.txt"
     concat_list.write_text("".join(f"file '{loop}'\n" for _ in range(reps)))
     out = project / "renders" / f"{args.project}.mp4"
-    print(f"[channel] Muxing final video ({fmt_ts(audio_dur, True)}, loop x{reps})…")
+    print(f"[channel] Muxing final video with Neopunk HUD & LED EQ ({fmt_ts(audio_dur, True)}, loop x{reps})…")
+
+    # Filter complex:
+    # 0:v -> video loop concat
+    # 1:a -> full mix audio
+    # 2:v -> HUD badge right
+    # 3:v -> Grid mask for LED segments
+    filter_complex = (
+        f"[1:a]lowpass=f=400,showfreqs=s=380x96:mode=bar:ascale=log:fscale=lin:colors=green|yellow|orange|red:win_size=2048:win_func=flattop[raw_eq];"
+        f"[raw_eq][3:v]overlay=0:0[grid_eq];"
+        f"[grid_eq]colorkey=0x000000:0.25:0.05,format=yuva420p[eq];"
+        f"[2:v]scale=360:-1[badge];"
+        f"[0:v][eq]overlay=45:H-h-45[v1];"
+        f"[v1][badge]overlay=W-w-40:H-h-35[vout]"
+    )
+
     run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-stats",
-         "-f", "concat", "-safe", "0", "-i", str(concat_list), "-i", str(mix),
-         "-map", "0:v", "-map", "1:a", "-c:v", "copy",
+         "-f", "concat", "-safe", "0", "-i", str(concat_list),
+         "-i", str(mix),
+         "-i", str(HUD_BADGE_PNG),
+         "-i", str(GRID_MASK_PNG),
+         "-filter_complex", filter_complex,
+         "-map", "[vout]", "-map", "1:a",
+         "-c:v", "libx264", "-preset", "veryfast", "-crf", str(args.crf),
+         "-pix_fmt", "yuv420p", "-r", str(args.fps),
          "-c:a", "aac", "-b:a", "320k", "-ar", "48000",
-         "-metadata", f"artist={CHANNEL_NAME}",
+         "-metadata", f"title={args.project}", "-metadata", f"artist={CHANNEL_NAME}",
          "-t", f"{audio_dur:.3f}", "-movflags", "+faststart", str(out)])
 
     # 4) Artifacts
@@ -189,6 +214,22 @@ def main() -> None:
         "tracks": [{"start": round(s, 3), "timestamp": fmt_ts(s, force_h), "title": t["title"],
                     "slug": t["slug"], "duration": t["duration"]} for s, t in zip(starts, ordered)],
     }, indent=2, ensure_ascii=False))
+
+    # 5) Thumbnail
+    thumb_out = project / "renders" / f"{args.project}-thumb.jpg"
+    try:
+        mix_title = args.project.replace("-", " ").upper()
+        if "MIX" not in mix_title:
+            mix_title = f"{mix_title} MIX"
+        create_thumbnail(
+            title=mix_title,
+            output_path=thumb_out,
+            subtitle=CHANNEL_NAME,
+            badge_text=f"1 HOUR // {len(ordered)} TRACKS",
+        )
+    except Exception as e:
+        print(f"[channel] Warning: Failed to generate compilation thumbnail: {e}")
+
     print(f"[channel] Done: {out}\n[channel] Chapters: {project / 'artifacts' / 'chapters.txt'}")
 
 
