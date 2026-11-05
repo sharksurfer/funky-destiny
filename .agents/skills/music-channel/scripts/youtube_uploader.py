@@ -78,17 +78,18 @@ def generate_seo_metadata(title: str, tag: str, is_mix: bool = False, chapters_t
     clean_tag = tag.strip().lower() if tag else "funk"
 
     if is_mix:
-        seo_title = f"1 HOUR HEAVY BASS MIX - Instrumental Funk & Slap Grooves | {CHANNEL_NAME}"
+        album_title = "KNUCKLE POP OVERDRIVE"
+        seo_title = f"{album_title} - 1 Hour Heavy Bass Mix | {CHANNEL_NAME} (Official Album)"
         seo_desc = (
-            f"⚡ 1 Hour of relentless heavy bass grooves, slap solos, and cyberpunk funk rhythms by {CHANNEL_NAME}.\n"
+            f"⚡ '{album_title}' — 1 Hour of relentless heavy bass grooves, aggressive slap solos, and cyberpunk funk rhythms by {CHANNEL_NAME}.\n"
             f"Perfect for coding, workout, driving, gaming, and pure bass enthusiasts.\n\n"
             f"🎵 TRACKLIST & CHAPTERS:\n{chapters_text}\n\n"
             f"🔥 ABOUT {CHANNEL_NAME}:\n"
             f"Original instrumental funk, driving synth-bass, and punchy rhythmic slap bass compositions.\n\n"
-            f"#FunkMusic #BassGuitar #SlapBass #FunkyDestiny #1HourMix #Groove #BassMix"
+            f"#KnucklePopOverdrive #FunkMusic #BassGuitar #SlapBass #FunkyDestiny #1HourMix #Groove #BassMix"
         )
         seo_tags = [
-            "1 hour bass mix", "heavy bass", "slap bass mix", "funk instrumental",
+            "knuckle pop overdrive", "1 hour bass mix", "heavy bass", "slap bass mix", "funk instrumental",
             "bass groove", "funky destiny", "cyberpunk funk", "bass backing track",
             "workout bass music", "instrumental funk mix", "bass solos", "groove music"
         ]
@@ -376,11 +377,90 @@ def sync_all_channel_thumbnails(youtube) -> None:
 
 
 
+def schedule_video_publication(youtube, video_id: str, publish_at_iso: str) -> bool:
+    """Schedule a private video to become public at a specific ISO 8601 UTC timestamp."""
+    try:
+        body = {
+            "id": video_id,
+            "status": {
+                "privacyStatus": "private",
+                "publishAt": publish_at_iso,
+                "selfDeclaredMadeForKids": False
+            }
+        }
+        res = youtube.videos().update(part="status", body=body).execute()
+        print(f"[youtube] Video {video_id} scheduled for: {publish_at_iso}")
+        return True
+    except Exception as e:
+        print(f"[youtube] Failed to schedule video {video_id}: {e}")
+        return False
+
+
+def schedule_album_campaign(youtube) -> None:
+    """Schedule all 12 singles and the album mix according to the optimal release calendar."""
+    from common import load_masters
+    masters = load_masters()
+    ledger_file = PROJECTS / "uploads_ledger.json"
+    if not ledger_file.exists():
+        sys.exit(f"[youtube] Ledger file not found at {ledger_file}")
+
+    ledger = json.loads(ledger_file.read_text())
+
+    # Release calendar: 3 singles per week (Mon/Wed/Fri at 15:00 UTC = 12:00 Brasilia)
+    # Followed by Album mix on Fri Dec 04 at 20:00 UTC = 17:00 Brasilia
+    schedule_plan = [
+        ("knuckle-pop-overdrive", "2026-11-06T15:00:00Z"),
+        ("asphalt-bass-shakedown", "2026-11-09T15:00:00Z"),
+        ("concrete-thumb-riot", "2026-11-11T15:00:00Z"),
+        ("curbside-low-end-theory", "2026-11-13T15:00:00Z"),
+        ("gutter-funk-resurrection", "2026-11-16T15:00:00Z"),
+        ("modulus-groove-improvisation-iii", "2026-11-18T15:00:00Z"),
+        ("piston-slap-machine", "2026-11-20T15:00:00Z"),
+        ("redline-bass-burn", "2026-11-23T15:00:00Z"),
+        ("seismic-thumbprint", "2026-11-25T15:00:00Z"),
+        ("shattered-pickguard", "2026-11-27T15:00:00Z"),
+        ("subterranean-pluck", "2026-11-30T15:00:00Z"),
+        ("voltage-in-the-tendon", "2026-12-02T15:00:00Z"),
+        ("mix", "2026-12-04T20:00:00Z"),
+    ]
+
+    print("\n=== STARTING AUTOMATED PUBLICATION SCHEDULING ===")
+    for item_key, pub_time in schedule_plan:
+        target_video_id = None
+        target_title = None
+
+        if item_key == "mix":
+            for title, info in ledger.items():
+                if info.get("is_mix"):
+                    target_video_id = info.get("video_id")
+                    target_title = title
+                    break
+        else:
+            track = next((t for t in masters if t["slug"] == item_key), None)
+            if track:
+                for title, info in ledger.items():
+                    if not info.get("is_mix") and track["title"].upper() in title.upper():
+                        target_video_id = info.get("video_id")
+                        target_title = title
+                        break
+
+        if target_video_id:
+            print(f"\nScheduling: {target_title[:45]}...")
+            schedule_video_publication(youtube, target_video_id, pub_time)
+            time.sleep(1)
+        else:
+            print(f"Warning: Could not find video in ledger for '{item_key}'")
+
+    print("\n=== ALL VIDEOS SCHEDULED SUCCESSFULLY! ===")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--song", help="Upload a specific single by slug")
     ap.add_argument("--all-singles", action="store_true", help="Batch upload all 24 singles")
     ap.add_argument("--mix", help="Upload compilation mix by project folder (e.g. funky-destiny-1hour-bass-mix)")
+    ap.add_argument("--schedule-campaign", action="store_true",
+                    help="Schedule all uploaded singles and mix according to release calendar")
     ap.add_argument("--update-thumbnail", nargs=2, metavar=("VIDEO_ID", "THUMB_PATH"),
                     help="Update thumbnail for an already uploaded video: --update-thumbnail <VIDEO_ID> <PATH_TO_JPG>")
     ap.add_argument("--sync-channel-thumbnails", action="store_true",
@@ -389,13 +469,15 @@ def main() -> None:
                     help="Video privacy setting (default: private for safety)")
     args = ap.parse_args()
 
-    if not (args.song or args.all_singles or args.mix or args.update_thumbnail or args.sync_channel_thumbnails):
+    if not (args.song or args.all_singles or args.mix or args.update_thumbnail or args.sync_channel_thumbnails or args.schedule_campaign):
         ap.print_help()
         sys.exit(1)
 
     youtube = get_authenticated_service()
 
-    if args.sync_channel_thumbnails:
+    if args.schedule_campaign:
+        schedule_album_campaign(youtube)
+    elif args.sync_channel_thumbnails:
         sync_all_channel_thumbnails(youtube)
     elif args.update_thumbnail:
         vid_id, t_path = args.update_thumbnail

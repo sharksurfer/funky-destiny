@@ -134,6 +134,35 @@ def render_single_song(song_slug: str, force: bool = False, crf: int = 18, prese
     tag = (track.get("tag") or "").lower()
     badge_label = f"{tag.upper()} // BASS" if tag else "HEAVY BASS GROOVE"
 
+    slug = track["slug"]
+
+    # Clean AI Artwork path resolution:
+    # 1) Specific artwork inside project-assets/album-2/<track_dir>/
+    # 2) Specific raw artwork in projects/<album>/single-<slug>/assets/images/
+    # 3) Fallback to thumbnail base art or default
+    clean_art = None
+    album_dir = REPO / "project-assets" / "album-2"
+    if album_dir.exists():
+        for track_dir in album_dir.iterdir():
+            if track_dir.is_dir() and slug in track_dir.name.lower().replace(" ", "-"):
+                imgs = [f for f in track_dir.iterdir() if f.suffix.lower() in [".jpg", ".jpeg", ".png", ".webp"]]
+                if imgs:
+                    clean_art = imgs[0]
+                    break
+
+    if clean_art is None:
+        clean_art_candidates = [
+            PROJECTS / f"single-{slug}" / "assets" / "images" / f"{slug}_raw.jpg",
+            REPO / "project-assets" / "channel-branding" / "thumb_clean_base.jpg"
+        ]
+        for cand in clean_art_candidates:
+            if cand.exists():
+                clean_art = cand
+                break
+
+    if clean_art is None:
+        clean_art = REPO / "project-assets" / "channel-branding" / "thumb_clean_base.jpg"
+
     # Always ensure thumbnail exists
     if not thumb_out.exists() or force:
         try:
@@ -142,6 +171,7 @@ def render_single_song(song_slug: str, force: bool = False, crf: int = 18, prese
                 output_path=thumb_out,
                 subtitle=CHANNEL_NAME,
                 badge_text=badge_label,
+                base_art=clean_art,
             )
         except Exception as e:
             print(f"[single] Warning: Failed to generate thumbnail: {e}")
@@ -149,28 +179,6 @@ def render_single_song(song_slug: str, force: bool = False, crf: int = 18, prese
     if out.exists() and not force:
         print(f"[single] Up to date: {out}")
         return out
-    # Clean AI Artwork path resolution:
-    # 1) Specific raw artwork in brain/ or assets/images/
-    # 2) Fallback to thumbnail base art or default
-    clean_art_candidates = [
-        REPO / "projects" / f"single-{slug}" / "assets" / "images" / f"{slug}_raw.jpg",
-        Path("/home/trgp/.gemini/antigravity-ide/brain/1bb2f1c0-cc77-450d-83f2-95880f668daf") / f"thumb_{slug.replace('-', '_')}_*.jpg",
-        REPO / "project-assets" / "channel-branding" / "thumb_clean_base.jpg"
-    ]
-    
-    clean_art = None
-    for cand in clean_art_candidates:
-        if "*" in str(cand):
-            matches = list(cand.parent.glob(cand.name))
-            if matches:
-                clean_art = matches[0]
-                break
-        elif cand.exists():
-            clean_art = cand
-            break
-
-    if clean_art is None:
-        clean_art = REPO / "project-assets" / "channel-branding" / "thumb_clean_base.jpg"
 
     print(f"\n[single] === Rendering Visualizer for '{track['title']}' ===")
     print(f"[single] Artwork: {clean_art.name} | Master: {master.name}")

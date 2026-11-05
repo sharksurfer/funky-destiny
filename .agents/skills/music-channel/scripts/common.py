@@ -17,10 +17,19 @@ from pathlib import Path
 
 # .agents/skills/music-channel/scripts/common.py -> repo root is parents[4]
 REPO = Path(__file__).resolve().parents[4]
-SONGS_DIR = REPO / "project-assets" / "songs"
-VIDEOS_DIR = REPO / "project-assets" / "videos"
-PROJECTS = REPO / "projects"
 
+# Resolve album directory from environment variable or default to album-2
+ALBUM_NAME = os.environ.get("ALBUM_NAME", "album-2")
+SONGS_DIR = REPO / "project-assets" / ALBUM_NAME / "songs"
+if not SONGS_DIR.exists():
+    # Fallback to direct songs/ if present
+    legacy_songs = REPO / "project-assets" / "songs"
+    if legacy_songs.exists():
+        SONGS_DIR = legacy_songs
+VIDEOS_DIR = REPO / "project-assets" / "videos"
+
+# Outputs live under projects/<ALBUM_NAME>/
+PROJECTS = REPO / "projects" / ALBUM_NAME
 MASTERS_PROJECT = PROJECTS / "audio-masters"
 MASTERS_DIR = MASTERS_PROJECT / "assets" / "audio"
 MASTERS_MANIFEST = MASTERS_PROJECT / "artifacts" / "masters.json"
