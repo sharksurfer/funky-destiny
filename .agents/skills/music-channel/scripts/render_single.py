@@ -163,18 +163,26 @@ def render_single_song(song_slug: str, force: bool = False, crf: int = 18, prese
     if clean_art is None:
         clean_art = REPO / "project-assets" / "channel-branding" / "thumb_clean_base.jpg"
 
-    # Always ensure thumbnail exists
-    if not thumb_out.exists() or force:
+    # Always ensure thumbnail exists (clean style: raw art + official HUD badge only, NO text drawn over art)
+    if not thumb_out.exists():
         try:
-            create_thumbnail(
-                title=track["title"],
-                output_path=thumb_out,
-                subtitle=CHANNEL_NAME,
-                badge_text=badge_label,
-                base_art=clean_art,
-            )
+            from PIL import Image
+            hud_path = REPO / "project-assets" / "channel-branding" / "hud_badge_opaque_tight.png"
+            bg = Image.open(clean_art).convert("RGB")
+            thumb = bg.resize((1280, 720), getattr(getattr(Image, "Resampling", Image), "LANCZOS", Image.ANTIALIAS)).convert("RGBA")
+            if hud_path.exists():
+                hud = Image.open(hud_path).convert("RGBA")
+                hud_w = int(1280 * 0.22)
+                hud_h = int(hud_w * hud.height / hud.width)
+                hud_scaled = hud.resize((hud_w, hud_h), getattr(getattr(Image, "Resampling", Image), "LANCZOS", Image.ANTIALIAS))
+                margin = 32
+                pos_x = 1280 - hud_w - margin
+                pos_y = 720 - hud_h - margin
+                thumb.paste(hud_scaled, (pos_x, pos_y), hud_scaled)
+            thumb.convert("RGB").save(thumb_out, "JPEG", quality=95)
+            print(f"[single] Clean thumbnail generated without text: {thumb_out.name}")
         except Exception as e:
-            print(f"[single] Warning: Failed to generate thumbnail: {e}")
+            print(f"[single] Warning: Failed to generate clean thumbnail: {e}")
 
     if out.exists() and not force:
         print(f"[single] Up to date: {out}")
@@ -183,14 +191,12 @@ def render_single_song(song_slug: str, force: bool = False, crf: int = 18, prese
     print(f"\n[single] === Rendering Visualizer for '{track['title']}' ===")
     print(f"[single] Artwork: {clean_art.name} | Master: {master.name}")
 
-    # Official Character Clips pool for subtle overlay
-    char_clips = [
-        REPO / "project-assets" / "videos" / "Character_enjoying_music_2b9b2dcd.mp4",
-        REPO / "project-assets" / "videos" / "Character_enjoying_music_e7532694.mp4",
-        REPO / "project-assets" / "videos" / "Character_enjoying_music_subtly_b8f2379b.mp4",
-        REPO / "project-assets" / "videos" / "Character_enjoying_music_subtly_c84676ae.mp4",
-    ]
-    valid_char_clips = [c for c in char_clips if c.exists()]
+    # Official Character Clips pool for subtle overlay (all 7 clips shuffled per video)
+    import random
+    all_char_clips = list((REPO / "project-assets" / "channel-branding" / "videos").glob("*.mp4"))
+    random.shuffle(all_char_clips)
+    valid_char_clips = [c for c in all_char_clips if c.exists()]
+    print(f"[single] Character clips shuffled ({len(valid_char_clips)} clips in rotation)")
 
     # Run the approved visualizer rendering script
     from visualizer_engine import render_visualizer_video

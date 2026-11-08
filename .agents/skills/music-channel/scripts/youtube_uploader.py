@@ -109,14 +109,15 @@ def generate_seo_metadata(title: str, tag: str, is_mix: bool = False, chapters_t
             f"Bass-heavy instrumental funk featuring punchy slap grooves, electric rhythmic drive, and cyberpunk aesthetic.\n\n"
             f"🎧 Artist: {CHANNEL_NAME}\n"
             f"🎵 Track: {title}\n"
-            f"⚡ Style: {style_desc}\n\n"
+            f"⚡ Style: {style_desc}\n"
+            f"🤖 Production: AI-assisted audio composition & generative visual art\n\n"
             f"Subscribe to {CHANNEL_NAME} for weekly heavy bass grooves and instrumental funk releases.\n\n"
-            f"#{title.replace(' ', '')} #FunkMusic #BassGroove #SlapBass #{CHANNEL_NAME.replace(' ', '')}"
+            f"#{title.replace(' ', '')} #FunkMusic #BassGroove #SlapBass #AIGeneratedMusic #{CHANNEL_NAME.replace(' ', '')}"
         )
         seo_tags = [
             title.lower(), f"{title.lower()} bass", CHANNEL_NAME.lower(), "funk instrumental",
             "slap bass", "bass groove", "heavy bass", "funk bass solo", "bassline",
-            clean_tag, "instrumental music"
+            "ai music", "ai generated video", clean_tag, "instrumental music"
         ]
 
     return {
@@ -134,6 +135,7 @@ def upload_video(
     title: str,
     tag: str = "",
     privacy_status: str = "private",
+    publish_at: str | None = None,
     is_mix: bool = False,
     chapters_text: str = "",
 ) -> str | None:
@@ -141,6 +143,14 @@ def upload_video(
     from googleapiclient.http import MediaFileUpload
 
     metadata = generate_seo_metadata(title, tag, is_mix=is_mix, chapters_text=chapters_text)
+
+    status_dict = {
+        "privacyStatus": privacy_status,
+        "selfDeclaredMadeForKids": False,
+    }
+    if publish_at:
+        status_dict["publishAt"] = publish_at
+        status_dict["privacyStatus"] = "private"
 
     body = {
         "snippet": {
@@ -151,15 +161,12 @@ def upload_video(
             "defaultLanguage": "en",
             "defaultAudioLanguage": "en",
         },
-        "status": {
-            "privacyStatus": privacy_status,
-            "selfDeclaredMadeForKids": False,
-        },
+        "status": status_dict,
     }
 
     print(f"\n[youtube] Uploading: '{video_path.name}' ({video_path.stat().st_size / (1024*1024):.1f} MB)")
     print(f"[youtube] Title: {metadata['title']}")
-    print(f"[youtube] Privacy: {privacy_status}")
+    print(f"[youtube] Privacy: {status_dict['privacyStatus']}" + (f" (Scheduled for: {publish_at})" if publish_at else ""))
 
     media = MediaFileUpload(str(video_path), mimetype="video/mp4", resumable=True, chunksize=1024 * 1024 * 10)
     request = youtube.videos().insert(part=",".join(body.keys()), body=body, media_body=media)
@@ -217,7 +224,7 @@ def upload_video(
 
 
 
-def upload_single_song(youtube, song_slug: str, privacy: str = "private") -> str | None:
+def upload_single_song(youtube, song_slug: str, privacy: str = "private", publish_at: str | None = None) -> str | None:
     masters = load_masters()
     track = next((t for t in masters if t["slug"] == song_slug), None)
     if not track:
@@ -237,11 +244,12 @@ def upload_single_song(youtube, song_slug: str, privacy: str = "private") -> str
         title=track["title"],
         tag=track.get("tag", ""),
         privacy_status=privacy,
+        publish_at=publish_at,
         is_mix=False,
     )
 
 
-def upload_compilation_mix(youtube, project_name: str, privacy: str = "private") -> str | None:
+def upload_compilation_mix(youtube, project_name: str, privacy: str = "private", publish_at: str | None = None) -> str | None:
     proj = PROJECTS / project_name
     video_file = proj / "renders" / f"{project_name}.mp4"
     thumb_file = proj / "renders" / f"{project_name}-thumb.jpg"
@@ -259,6 +267,7 @@ def upload_compilation_mix(youtube, project_name: str, privacy: str = "private")
         title="1 HOUR BASS MIX",
         tag="heavybass",
         privacy_status=privacy,
+        publish_at=publish_at,
         is_mix=True,
         chapters_text=chapters_content,
     )
